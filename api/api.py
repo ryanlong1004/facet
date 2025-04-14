@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, Path
 from pydantic import BaseModel
 from typing import List, Optional
+import uvicorn
 
 app = FastAPI(
     title="GrayMeta Faces API",
@@ -167,3 +168,7 @@ async def get_person_faces(person_id: str = Path(...)):
 )
 async def update_person(person_id: str = Path(...), params: dict = {}):
     return {"processing_time": 0.1}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
