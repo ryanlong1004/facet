@@ -147,6 +147,8 @@ async def get_face(face_id: str = Path(...)):
     """
     try:
         face_data = PickleCRUD(PICKLE_FILE_PATH).read(face_id)
+        if face_data is None:
+            raise HTTPException(status_code=404, detail="Face not found")
         return face_data
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
