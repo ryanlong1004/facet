@@ -13,3 +13,5 @@ wheels/
 datasets/
 data/
 
+*.pkl
+*log*
