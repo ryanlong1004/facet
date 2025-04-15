@@ -265,11 +265,14 @@ async def delete_client(client_id: str = Path(...)):
 
 # Faces Endpoints
 @faces_router.get(
-    "/{face_id}", response_model=FaceData, responses={404: {"model": Error}}
+    "/{face_id}",
+    response_model=FaceData,
+    responses={404: {"model": Error}},
+    deprecated=True,
 )
 async def get_face(face_id: str = Path(...)):
     """
-    Retrieve a face by its ID.
+    Retrieve a face by its ID (Deprecated).
 
     Args:
         face_id (str): The unique ID of the face.
@@ -286,12 +289,16 @@ async def get_face(face_id: str = Path(...)):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@faces_router.get("/", response_model=List[FaceData], responses={400: {"model": Error}})
+@faces_router.get(
+    "/",
+    response_model=List[FaceData],
+    responses={400: {"model": Error}},
+)
 async def get_all_faces(
     page_number: int = Query(1, ge=1), page_length: int = Query(10, ge=1)
 ):
     """
-    Retrieve all faces with pagination.
+    Retrieve all faces with pagination (Deprecated).
 
     Args:
         page_number (int): The page number (default is 1).
@@ -313,15 +320,65 @@ async def get_all_faces(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@faces_router.post(
+    "/",
+    response_model=Success,
+    responses={400: {"model": Error}},
+)
+async def create_face(face_data: FaceData):
+    """
+    Create a new face record (Deprecated).
+
+    Args:
+        face_data (FaceData): The face data to create.
+
+    Returns:
+        Success: The response containing the face ID and processing time.
+    """
+    try:
+        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud.create(face_data.face_id, face_data)
+        logger.info("Created face with ID %s", face_data.face_id)
+        return {"client_id": face_data.face_id, "processing_time": 0.1}
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@faces_router.put(
+    "/{face_id}",
+    response_model=Success,
+    responses={404: {"model": Error}},
+    deprecated=True,
+)
+async def update_face(face_id: str, face_data: FaceData):
+    """
+    Update an existing face record (Deprecated).
+
+    Args:
+        face_id (str): The unique ID of the face.
+        face_data (FaceData): The updated face data.
+
+    Returns:
+        Success: The response containing the face ID and processing time.
+    """
+    try:
+        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud.update(face_id, face_data)
+        logger.info("Updated face with ID %s", face_id)
+        return {"client_id": face_id, "processing_time": 0.1}
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @faces_router.delete(
     "/{face_id}",
     response_model=DeletedFaces,
-    responses={400: {"model": Error}},
+    responses={404: {"model": Error}},
     deprecated=True,
 )
 async def delete_face(face_id: str = Path(...)):
     """
-    Delete a face by its ID.
+    Delete a face by its ID (Deprecated).
 
     Args:
         face_id (str): The unique ID of the face.
@@ -330,7 +387,9 @@ async def delete_face(face_id: str = Path(...)):
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        PickleCRUD(PICKLE_FILE_PATH).delete(face_id)
+        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud.delete(face_id)
+        logger.info("Deleted face with ID %s", face_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
