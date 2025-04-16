@@ -1,33 +1,35 @@
 """
 api.py
 
-This module provides the FastAPI application for managing face data. It includes endpoints for clients, faces,
+This module provides the FastAPI application for managing face data. It includes endpoints for accounts, faces,
 people, and health checks. The API uses a pickle file to store and retrieve face data.
 
 Modules:
-    - Clients: Manage client-related operations.
+    - Accounts: Manage account-related operations.
     - Faces: Manage face-related operations.
     - People: Manage person-related operations.
     - Health: Check the health of the API.
 
 Classes:
-    CreateClient: Request model for creating a client.
+    CreateAccount: Request model for creating a account.
     Success: Response model for successful operations.
     Error: Response model for errors.
     DeletedFaces: Response model for deleted faces.
 """
 
-import os
-from typing import List, Dict
 import logging
+import os
+from typing import Dict, List
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from gateway import PickleCRUD
-from models import FaceData
+from gateway.faces import FaceDataHandler
+from gateway.people import PersonDataHandler
+from models import FaceData, PersonData
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,18 +40,19 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Fetch the Pickle file path from the .env file
-PICKLE_FILE_PATH = os.getenv("PICKLE_FILE_PATH", "metadata.pkl")
+FACES_PICKLE_FILE_PATH = os.getenv("FACES_PICKLE_FILE_PATH", "faces.pkl")
+PEOPLE_PICKLE_FILE_PATH = os.getenv("PEOPLE_PICKLE_FILE_PATH", "people.pkl")
 
 API_DESCRIPTION = """
-This API provides a comprehensive solution for managing face data, including operations for clients, faces, and people, as well as health checks. It is built using FastAPI and leverages a pickle file for data storage and retrieval. Below is a detailed description of the API's functionality:
+This API provides a comprehensive solution for managing face data, including operations for accounts, faces, and people, as well as health checks. It is built using FastAPI and leverages a pickle file for data storage and retrieval. Below is a detailed description of the API's functionality:
 
 ### Features:
-1. **Clients Management**:
-    - Retrieve all client IDs.
-    - Retrieve details of a specific client by ID.
-    - Create a new client.
-    - Update an existing client's details.
-    - Delete a client by ID.
+1. **Accounts Management**:
+    - Retrieve all account IDs.
+    - Retrieve details of a specific account by ID.
+    - Create a new account.
+    - Update an existing account's details.
+    - Delete a account by ID.
 
 2. **Faces Management**:
     - Retrieve face data by face ID.
@@ -69,7 +72,7 @@ This API provides a comprehensive solution for managing face data, including ope
 
 ### Additional Details:
 - **Environment Variables**:
-  - `PICKLE_FILE_PATH`: Path to the pickle file for data storage.
+  - `FACES_PICKLE_FILE_PATH`: Path to the pickle file for data storage.
   - `API_TITLE`: Title of the API.
   - `API_DESCRIPTION`: Description of the API.
   - `API_VERSION`: Version of the API.
@@ -95,23 +98,26 @@ app = FastAPI(
     version=os.getenv("API_VERSION", "0.1"),
 )
 
+# Bearer token authentication
+security = HTTPBearer()
+
 # Initialize API routers
-clients_router = APIRouter(prefix="/clients", tags=["Clients"])
+accounts_router = APIRouter(prefix="/accounts", tags=["Accounts"])
 faces_router = APIRouter(prefix="/faces", tags=["Faces"])
 people_router = APIRouter(prefix="/people", tags=["People"])
 health_router = APIRouter(prefix="/health", tags=["Health"])
 
 
 # Request and Response Models
-class CreateClient(BaseModel):
+class CreateAccount(BaseModel):
     """
-    Request model for creating a client.
+    Request model for creating a account.
 
     Attributes:
-        client_id (str): The unique ID of the client.
+        account_id (int): The unique ID of the account.
     """
 
-    client_id: str
+    account_id: int
 
 
 class Success(BaseModel):
@@ -119,11 +125,11 @@ class Success(BaseModel):
     Response model for successful operations.
 
     Attributes:
-        client_id (str): The unique ID of the client.
+        account_id (int): The unique ID of the account.
         processing_time (float): The time taken to process the request.
     """
 
-    client_id: str
+    account_id: int
     processing_time: float
 
 
@@ -151,113 +157,133 @@ class DeletedFaces(BaseModel):
     processing_time: float
 
 
-# Clients Endpoints
-@clients_router.get(
+# Accounts Endpoints
+@accounts_router.get(
     "/", response_model=Dict[str, List[str]], responses={400: {"model": Error}}
 )
-async def get_all_clients():
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
-    Retrieve all client IDs.
+    Verify the provided bearer token.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): The bearer token credentials.
+
+    Raises:
+        HTTPException: If the token is invalid.
 
     Returns:
-        Dict[str, List[str]]: A dictionary containing all client IDs.
+        str: The token if valid.
+    """
+    token = credentials.credentials
+    # Replace "your-secret-token" with your actual token or token validation logic
+    if token != "your-secret-token":
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
+    return token
+
+
+async def get_all_accounts():
+    """
+    Retrieve all account IDs.
+
+    Returns:
+        Dict[str, List[str]]: A dictionary containing all account IDs.
     """
     try:
-        # Simulate retrieving all clients (e.g., from a database or pickle file)
+        # Simulate retrieving all accounts (e.g., from a database or pickle file)
         # This is a placeholder for actual logic
-        logger.info("Retrieving all clients")
-        clients = ["client1", "client2", "client3"]  # Example data
-        return {"clients": clients}
+        logger.info("Retrieving all accounts")
+        accounts = ["account1", "account2", "account3"]  # Example data
+        return {"accounts": accounts}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@clients_router.get(
-    "/{client_id}", response_model=Dict[str, str], responses={404: {"model": Error}}
+@accounts_router.get(
+    "/{account_id}", response_model=Dict[str, str], responses={404: {"model": Error}}
 )
-async def get_client(client_id: str = Path(...)):
+async def get_account(account_id: str = Path(...)):
     """
-    Retrieve a client by their ID.
+    Retrieve a account by their ID.
 
     Args:
-        client_id (str): The unique ID of the client.
+        account_id (str): The unique ID of the account.
 
     Returns:
-        Dict[str, str]: A dictionary containing the client ID and additional details.
+        Dict[str, str]: A dictionary containing the account ID and additional details.
     """
     try:
-        # Simulate retrieving a client (e.g., from a database or pickle file)
+        # Simulate retrieving a account (e.g., from a database or pickle file)
         # This is a placeholder for actual logic
-        logger.info("Retrieving client with ID %s", client_id)
-        client_data = {
-            "client_id": client_id,
-            "details": "Example client details",
+        logger.info("Retrieving account with ID %s", account_id)
+        account_data = {
+            "account_id": account_id,
+            "details": "Example account details",
         }  # Example data
-        return client_data
+        return account_data
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@clients_router.post("/", response_model=Success, responses={400: {"model": Error}})
-async def create_client(client: CreateClient):
+@accounts_router.post("/", response_model=Success, responses={400: {"model": Error}})
+async def create_account(account: CreateAccount):
     """
-    Create a new client.
+    Create a new account.
 
     Args:
-        client (CreateClient): The client data.
+        account (CreateAccount): The account data.
 
     Returns:
-        Success: The response containing the client ID and processing time.
+        Success: The response containing the account ID and processing time.
     """
     try:
-        # Simulate creating a client (e.g., adding to a database or pickle file)
+        # Simulate creating a account (e.g., adding to a database or pickle file)
         # This is a placeholder for actual logic
-        logger.info("Creating client with ID %s", client.client_id)
-        return {"client_id": client.client_id, "processing_time": 0.1}
+        logger.info("Creating account with ID %s", account.account_id)
+        return {"account_id": account.account_id, "processing_time": 0.1}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@clients_router.put(
-    "/{client_id}", response_model=Success, responses={404: {"model": Error}}
+@accounts_router.put(
+    "/{account_id}", response_model=Success, responses={404: {"model": Error}}
 )
-async def update_client(client_id: str, client_name: str):
+async def update_account(account_id: str, account_name: str):
     """
-    Update an existing client.
+    Update an existing account.
 
     Args:
-        client_id (str): The unique ID of the client.
-        client_name (str): The updated name of the client.
+        account_id (str): The unique ID of the account.
+        account_name (str): The updated name of the account.
 
     Returns:
-        Success: The response containing the client ID and processing time.
+        Success: The response containing the account ID and processing time.
     """
     try:
-        # Simulate updating a client (e.g., modifying data in a database or pickle file)
+        # Simulate updating a account (e.g., modifying data in a database or pickle file)
         # This is a placeholder for actual logic
-        logger.info("Updating client with ID %s to name %s", client_id, client_name)
-        return {"client_id": client_id, "processing_time": 0.1}
+        logger.info("Updating account with ID %s to name %s", account_id, account_name)
+        return {"account_id": account_id, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@clients_router.delete(
-    "/{client_id}", response_model=DeletedFaces, responses={404: {"model": Error}}
+@accounts_router.delete(
+    "/{account_id}", response_model=DeletedFaces, responses={404: {"model": Error}}
 )
-async def delete_client(client_id: str = Path(...)):
+async def delete_account(account_id: str = Path(...)):
     """
-    Delete a client by their ID.
+    Delete a account by their ID.
 
     Args:
-        client_id (str): The unique ID of the client.
+        account_id (str): The unique ID of the account.
 
     Returns:
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        # Simulate deleting a client (e.g., removing from a database or pickle file)
+        # Simulate deleting a account (e.g., removing from a database or pickle file)
         # This is a placeholder for actual logic
-        logger.info("Deleting client with ID %s", client_id)
+        logger.info("Deleting account with ID %s", account_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -281,7 +307,7 @@ async def get_face(face_id: str = Path(...)):
         FaceData: The face data.
     """
     try:
-        face_data = PickleCRUD(PICKLE_FILE_PATH).read(face_id)
+        face_data = FaceDataHandler(FACES_PICKLE_FILE_PATH).read(face_id)
         if face_data is None:
             raise HTTPException(status_code=404, detail="Face not found")
         return face_data
@@ -308,7 +334,7 @@ async def get_all_faces(
         List[FaceData]: A list of face data.
     """
     try:
-        faces = PickleCRUD(PICKLE_FILE_PATH).read_all()
+        faces = FaceDataHandler(FACES_PICKLE_FILE_PATH).read_all()
         faces_list = list(faces.values())
 
         # Calculate offset based on page_number and page_length
@@ -336,10 +362,10 @@ async def create_face(face_data: FaceData):
         Success: The response containing the face ID and processing time.
     """
     try:
-        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
         crud.create(face_data.face_id, face_data)
         logger.info("Created face with ID %s", face_data.face_id)
-        return {"client_id": face_data.face_id, "processing_time": 0.1}
+        return {"account_id": face_data.face_id, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -362,10 +388,10 @@ async def update_face(face_id: str, face_data: FaceData):
         Success: The response containing the face ID and processing time.
     """
     try:
-        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
         crud.update(face_id, face_data)
         logger.info("Updated face with ID %s", face_id)
-        return {"client_id": face_id, "processing_time": 0.1}
+        return {"account_id": face_id, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -387,7 +413,7 @@ async def delete_face(face_id: str = Path(...)):
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        crud = PickleCRUD(PICKLE_FILE_PATH)
+        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
         crud.delete(face_id)
         logger.info("Deleted face with ID %s", face_id)
         return {"deletions": 1, "processing_time": 0.1}
@@ -397,55 +423,91 @@ async def delete_face(face_id: str = Path(...)):
 
 # People Endpoints
 @people_router.get(
-    "/", response_model=Dict[str, List[int]], responses={400: {"model": Error}}
+    "/", response_model=Dict[str, List[PersonData]], responses={400: {"model": Error}}
 )
-async def get_person_ids(
+async def get_persons(
     page_number: int = Query(1, ge=1), page_length: int = Query(10, ge=1)
 ):
     """
-    Retrieve all person IDs with pagination.
+    Retrieve all persons with pagination.
 
     Args:
         page_number (int): The page number (default is 1).
         page_length (int): The number of records per page (default is 10).
 
     Returns:
-        Dict[str, List[int]]: A dictionary containing the paginated group IDs.
+        Dict[str, List[PersonData]]: A dictionary containing the paginated person data.
     """
     try:
-        group_ids = PickleCRUD(PICKLE_FILE_PATH).get_all_group_ids()
+        people = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH).read_all()
+        people_list = list(people.values())
+
         # Calculate offset based on page_number and page_length
         offset = (page_number - 1) * page_length
-        paginated_group_ids = group_ids[offset : offset + page_length]
-        return {"group_ids": paginated_group_ids}
+        paginated_people = people_list[offset : offset + page_length]
+
+        # Return the result as a dictionary
+        return {"persons": paginated_people}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @people_router.get(
     "/{person_id}",
-    response_model=Dict[str, List[FaceData]],
+    response_model=Dict[
+        str, List[PersonData]
+    ],  # Ensure the response model expects a list
     responses={404: {"model": Error}},
 )
-async def get_person_faces(person_id: int = Path(...)):
+async def get_person(person_id: int):
     """
-    Retrieve all faces associated with a person ID.
+    Retrieve a person by their ID.
 
     Args:
         person_id (int): The unique ID of the person.
 
     Returns:
-        Dict[str, List[FaceData]]: A dictionary containing the person ID and associated faces.
+        Dict[str, List[PersonData]]: A dictionary containing the person data as a list.
     """
     try:
-        faces = PickleCRUD(PICKLE_FILE_PATH).find_by_group_id(person_id)
-        return {"person_id": person_id, "faces": faces}
+        person = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH).read(person_id)
+        if not person:
+            raise HTTPException(status_code=404, detail="Person not found")
+
+        # Wrap the single PersonData object in a list
+        return {"people": [person]}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@people_router.get(
+    "/{person_id}/faces",
+    response_model=Dict[str, List[FaceData]],
+    responses={404: {"model": Error}},
+)
+async def get_person_faces(person_id: int = Path(...)):
+    """
+    Retrieve all faces associated with a specific person ID.
+
+    Args:
+        person_id (int): The unique ID of the person.
+
+    Returns:
+        Dict[str, List[FaceData]]: A dictionary containing the person's faces.
+    """
+
+    try:
+        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        person_faces = crud.read(person_id)
+        if person_faces is None:
+            raise HTTPException(status_code=404, detail="Person not found")
+        return {"faces": person_faces}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @people_router.post("/", response_model=Success, responses={400: {"model": Error}})
-async def create_person(person_id: int, person_name: str):
+async def create_person(person_name: str):
     """
     Create a new person.
 
@@ -459,8 +521,15 @@ async def create_person(person_id: int, person_name: str):
     try:
         # Simulate creating a person (e.g., adding metadata to the pickle file)
         # This is a placeholder for actual logic
-        logger.info("Creating person with ID %s and name %s", person_id, person_name)
-        return {"client_id": person_id, "processing_time": 0.1}
+        logger.info("Creating person with name %s", person_name)
+        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        person = crud.create(person_name)
+        logger.info(
+            "Created person with ID %s and name %s",
+            person.person_id,
+            person.person_name,
+        )
+        return {"account_id": person.person_id, "processing_time": 0.1}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -470,7 +539,7 @@ async def create_person(person_id: int, person_name: str):
 )
 async def update_person(person_id: int, person_name: str):
     """
-    Update an existing person.
+    Update an existing person's details.
 
     Args:
         person_id (int): The unique ID of the person.
@@ -480,10 +549,10 @@ async def update_person(person_id: int, person_name: str):
         Success: The response containing the person ID and processing time.
     """
     try:
-        # Simulate updating a person (e.g., modifying metadata in the pickle file)
-        # This is a placeholder for actual logic
-        logger.info("Updating person with ID %s to name %s", person_id, person_name)
-        return {"client_id": person_id, "processing_time": 0.1}
+        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud.update(person_id, PersonData(person_id=person_id, person_name=person_name))
+        logger.info("Updated person with ID %s to name %s", person_id, person_name)
+        return {"account_id": person_id, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -502,9 +571,9 @@ async def delete_person(person_id: int = Path(...)):
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        # Simulate deleting a person (e.g., removing metadata from the pickle file)
-        # This is a placeholder for actual logic
-        logger.info("Deleting person with ID %s", person_id)
+        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud.delete(person_id)
+        logger.info("Deleted person with ID %s", person_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -520,27 +589,32 @@ async def health_check():
         Dict[str, str]: A dictionary containing the health status.
     """
     try:
-        PickleCRUD(PICKLE_FILE_PATH).read_all()  # Test if the pickle file is accessible
+        FaceDataHandler(
+            FACES_PICKLE_FILE_PATH
+        ).read_all()  # Test if the pickle file is accessible
         return {"status": "healthy"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}")
 
 
 # Include routers in the main app
-app.include_router(clients_router)
+app.include_router(accounts_router)
 app.include_router(faces_router)
 app.include_router(people_router)
 app.include_router(health_router)
 
 
 def main():
-    pickle_file_path = "faces.pkl"
     metadata_folder = "data/metadata"
+    people_file_path = "data/test_names_10000.txt"
 
-    crud = PickleCRUD(pickle_file_path)
+    faces_data_handler = FaceDataHandler(FACES_PICKLE_FILE_PATH)
+    people_data_handler = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
 
     # Import metadata using the new method
-    crud.import_metadata(metadata_folder)
+    faces_data_handler.import_metadata(metadata_folder)
+    people_ids = faces_data_handler.get_all_group_ids()
+    people_data_handler.generate_people_data(people_ids, people_file_path)
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

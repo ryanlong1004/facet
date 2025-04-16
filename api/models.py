@@ -8,10 +8,11 @@ Classes:
     BoundingBox: Represents the bounding box of a detected face.
     Attributes: Represents additional attributes of a detected face, such as race and confidence.
     FaceData: Represents the complete data for a detected face, including its embedding and metadata.
+    PersonData: Represents the data for a person.
 """
 
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 
 @dataclass
@@ -70,3 +71,17 @@ class FaceData:
     attributes: Attributes
     group_id: Optional[int]
     embedding: List[float]
+
+
+@dataclass
+class PersonData:
+    """
+    Represents the data for a person.
+
+    Attributes:
+        person_id (int): The unique identifier for the person.
+        person_name (str): The name of the person.
+    """
+
+    person_id: int
+    person_name: str
