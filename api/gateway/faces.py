@@ -16,6 +16,7 @@ import pickle
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict, List, Optional
 
+import duckdb
 from dotenv import load_dotenv
 
 from models import Attributes, BoundingBox, FaceData
@@ -171,7 +172,7 @@ class FaceDataHandler:
         json_files = self._get_json_files(metadata_folder)
         for file_path in json_files:
             try:
-                json_data = self._load_json(file_path)
+                json_data = self._load_json(file_path)  # Load JSON data from file
                 face_id = json_data.get("face_id")
                 if face_id:
                     face_data = self._convert_to_facedata(json_data)
@@ -301,7 +302,7 @@ class FaceDataHandler:
             Dict[str, Any]: The loaded JSON data.
 
         Raises:
-            Exception: If there is an error loading the JSON file.
+            Exception: If there is an error reading the JSON file.
         """
         try:
             with open(file_path, "r") as f:
