@@ -16,3 +16,5 @@ data/
 *.pkl
 *log*
 .env
+LFW/
+*.duckdb
