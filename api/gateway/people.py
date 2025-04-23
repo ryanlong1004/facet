@@ -9,7 +9,6 @@ Classes:
     PickleCRUD: A class for performing CRUD operations on a pickle file containing `PersonData` records.
 """
 
-import json
 import logging
 import os
 import pickle

@@ -2,7 +2,7 @@
 api.py
 
 This module provides the FastAPI application for managing face data. It includes endpoints for accounts, faces,
-people, and health checks. The API uses a pickle file to store and retrieve face data.
+people, and health checks. The API uses a DuckDB database to store and retrieve face data.
 
 Modules:
     - Accounts: Manage account-related operations.
@@ -11,7 +11,7 @@ Modules:
     - Health: Check the health of the API.
 
 Classes:
-    CreateAccount: Request model for creating a account.
+    CreateAccount: Request model for creating an account.
     Success: Response model for successful operations.
     Error: Response model for errors.
     DeletedFaces: Response model for deleted faces.
@@ -25,9 +25,10 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from gateway.faces import FaceDataHandler
+from gateway.duck import FaceDataHandler  # Updated to use FaceDataHandler from duck.py
 from gateway.people import PersonDataHandler
 from models import FaceData, PersonData
 
@@ -36,15 +37,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
-# Load environment variables from .env file
 load_dotenv()
 
-# Fetch the Pickle file path from the .env file
-FACES_PICKLE_FILE_PATH = os.getenv("FACES_PICKLE_FILE_PATH", "faces.pkl")
+# Fetch the DuckDB database file path from the .env file
+FACES_DB_PATH = os.getenv("FACES_DB_PATH", "faces.duckdb")
 PEOPLE_PICKLE_FILE_PATH = os.getenv("PEOPLE_PICKLE_FILE_PATH", "people.pkl")
 
 API_DESCRIPTION = """
-This API provides a comprehensive solution for managing face data, including operations for accounts, faces, and people, as well as health checks. It is built using FastAPI and leverages a pickle file for data storage and retrieval. Below is a detailed description of the API's functionality:
+This API provides a comprehensive solution for managing face data, including operations for accounts, faces, and people, as well as health checks. It is built using FastAPI and leverages a DuckDB database for data storage and retrieval. Below is a detailed description of the API's functionality:
 
 ### Features:
 1. **Accounts Management**:
@@ -52,12 +52,12 @@ This API provides a comprehensive solution for managing face data, including ope
     - Retrieve details of a specific account by ID.
     - Create a new account.
     - Update an existing account's details.
-    - Delete a account by ID.
+    - Delete an account by ID.
 
 2. **Faces Management**:
     - Retrieve face data by face ID.
     - Retrieve all face data with pagination support.
-    - Delete a face by ID (deprecated).
+    - Delete a face by ID.
 
 3. **People Management**:
     - Retrieve all person IDs with pagination support.
@@ -67,12 +67,12 @@ This API provides a comprehensive solution for managing face data, including ope
     - Delete a person by ID.
 
 4. **Health Check**:
-    - Verify the health of the API and its ability to access the pickle file.
+    - Verify the health of the API and its ability to access the DuckDB database.
 
 
 ### Additional Details:
 - **Environment Variables**:
-  - `FACES_PICKLE_FILE_PATH`: Path to the pickle file for data storage.
+  - `FACES_DB_PATH`: Path to the DuckDB database file for face data storage.
   - `API_TITLE`: Title of the API.
   - `API_DESCRIPTION`: Description of the API.
   - `API_VERSION`: Version of the API.
@@ -82,9 +82,6 @@ This API provides a comprehensive solution for managing face data, including ope
 
 - **Pagination**:
   - Pagination is supported for retrieving faces and person IDs, allowing efficient data retrieval.
-
-- **PickleCRUD**:
-  - A custom gateway class is used to interact with the pickle file for CRUD operations.
 
 """
 
@@ -110,49 +107,19 @@ health_router = APIRouter(prefix="/health", tags=["Health"])
 
 # Request and Response Models
 class CreateAccount(BaseModel):
-    """
-    Request model for creating a account.
-
-    Attributes:
-        account_id (int): The unique ID of the account.
-    """
-
     account_id: int
 
 
 class Success(BaseModel):
-    """
-    Response model for successful operations.
-
-    Attributes:
-        account_id (int): The unique ID of the account.
-        processing_time (float): The time taken to process the request.
-    """
-
     account_id: int
     processing_time: float
 
 
 class Error(BaseModel):
-    """
-    Response model for errors.
-
-    Attributes:
-        message (str): The error message.
-    """
-
     message: str
 
 
 class DeletedFaces(BaseModel):
-    """
-    Response model for deleted faces.
-
-    Attributes:
-        deletions (int): The number of faces deleted.
-        processing_time (float): The time taken to process the deletion.
-    """
-
     deletions: int
     processing_time: float
 
@@ -294,11 +261,10 @@ async def delete_account(account_id: str = Path(...)):
     "/{face_id}",
     response_model=FaceData,
     responses={404: {"model": Error}},
-    deprecated=True,
 )
 async def get_face(face_id: str = Path(...)):
     """
-    Retrieve a face by its ID (Deprecated).
+    Retrieve a face by its ID.
 
     Args:
         face_id (str): The unique ID of the face.
@@ -307,12 +273,12 @@ async def get_face(face_id: str = Path(...)):
         FaceData: The face data.
     """
     try:
-        face_data = FaceDataHandler(FACES_PICKLE_FILE_PATH).read(face_id)
+        face_data = FaceDataHandler(FACES_DB_PATH).read(face_id)
         if face_data is None:
             raise HTTPException(status_code=404, detail="Face not found")
         return face_data
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @faces_router.get(
@@ -324,7 +290,7 @@ async def get_all_faces(
     page_number: int = Query(1, ge=1), page_length: int = Query(10, ge=1)
 ):
     """
-    Retrieve all faces with pagination (Deprecated).
+    Retrieve all faces with pagination.
 
     Args:
         page_number (int): The page number (default is 1).
@@ -334,12 +300,11 @@ async def get_all_faces(
         List[FaceData]: A list of face data.
     """
     try:
-        faces = FaceDataHandler(FACES_PICKLE_FILE_PATH).read_all()
-        faces_list = list(faces.values())
+        faces = FaceDataHandler(FACES_DB_PATH).read_all()
 
         # Calculate offset based on page_number and page_length
         offset = (page_number - 1) * page_length
-        paginated_faces = faces_list[offset : offset + page_length]
+        paginated_faces = faces[offset : offset + page_length]
 
         return paginated_faces
     except Exception as e:
@@ -353,7 +318,7 @@ async def get_all_faces(
 )
 async def create_face(face_data: FaceData):
     """
-    Create a new face record (Deprecated).
+    Create a new face record.
 
     Args:
         face_data (FaceData): The face data to create.
@@ -362,11 +327,10 @@ async def create_face(face_data: FaceData):
         Success: The response containing the face ID and processing time.
     """
     try:
-        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
-        crud.create(face_data.face_id, face_data)
+        FaceDataHandler(FACES_DB_PATH).create(face_data)
         logger.info("Created face with ID %s", face_data.face_id)
         return {"account_id": face_data.face_id, "processing_time": 0.1}
-    except KeyError as e:
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -374,11 +338,10 @@ async def create_face(face_data: FaceData):
     "/{face_id}",
     response_model=Success,
     responses={404: {"model": Error}},
-    deprecated=True,
 )
 async def update_face(face_id: str, face_data: FaceData):
     """
-    Update an existing face record (Deprecated).
+    Update an existing face record.
 
     Args:
         face_id (str): The unique ID of the face.
@@ -388,23 +351,21 @@ async def update_face(face_id: str, face_data: FaceData):
         Success: The response containing the face ID and processing time.
     """
     try:
-        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
-        crud.update(face_id, face_data)
+        FaceDataHandler(FACES_DB_PATH).update(face_id, face_data)
         logger.info("Updated face with ID %s", face_id)
         return {"account_id": face_id, "processing_time": 0.1}
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @faces_router.delete(
     "/{face_id}",
     response_model=DeletedFaces,
     responses={404: {"model": Error}},
-    deprecated=True,
 )
 async def delete_face(face_id: str = Path(...)):
     """
-    Delete a face by its ID (Deprecated).
+    Delete a face by its ID.
 
     Args:
         face_id (str): The unique ID of the face.
@@ -413,12 +374,11 @@ async def delete_face(face_id: str = Path(...)):
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        crud = FaceDataHandler(FACES_PICKLE_FILE_PATH)
-        crud.delete(face_id)
+        FaceDataHandler(FACES_DB_PATH).delete(face_id)
         logger.info("Deleted face with ID %s", face_id)
         return {"deletions": 1, "processing_time": 0.1}
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # People Endpoints
@@ -590,8 +550,8 @@ async def health_check():
     """
     try:
         FaceDataHandler(
-            FACES_PICKLE_FILE_PATH
-        ).read_all()  # Test if the pickle file is accessible
+            FACES_DB_PATH
+        ).read_all()  # Test if the DuckDB database is accessible
         return {"status": "healthy"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}")
@@ -603,19 +563,32 @@ app.include_router(faces_router)
 app.include_router(people_router)
 app.include_router(health_router)
 
+# Serve the datasets folder as static files
+app.mount("/datasets", StaticFiles(directory="datasets"), name="datasets")
+
 
 def main():
     metadata_folder = "data/metadata"
     people_file_path = "data/test_names_10000.txt"
 
-    faces_data_handler = FaceDataHandler(FACES_PICKLE_FILE_PATH)
+    faces_data_handler = FaceDataHandler(FACES_DB_PATH)
     people_data_handler = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
 
     # Import metadata using the new method
-    faces_data_handler.import_metadata(metadata_folder)
-    people_ids = faces_data_handler.get_all_group_ids()
-    people_data_handler.generate_people_data(people_ids, people_file_path)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    # Ensure the DuckDB database file exists
+
+    if not os.path.exists(FACES_DB_PATH):
+        logger.warning(
+            "Database file %s does not exist. Creating a new one.", FACES_DB_PATH
+        )
+        faces_data_handler.import_metadata(metadata_folder)
+
+    # people_ids = faces_data_handler.get_all_group_ids()
+    # people_data_handler.generate_people_data(people_ids, people_file_path)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

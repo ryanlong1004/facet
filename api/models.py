@@ -13,6 +13,10 @@ Classes:
 
 from dataclasses import dataclass
 from typing import List, Optional
+from dotenv import load_dotenv
+from pydantic import BaseModel, validator
+import json
+import os
 
 
 @dataclass
@@ -27,10 +31,10 @@ class BoundingBox:
         height (int): The height of the bounding box.
     """
 
-    x: int
-    y: int
-    width: int
-    height: int
+    x: float
+    y: float
+    width: float
+    height: float
 
 
 @dataclass
@@ -47,8 +51,7 @@ class Attributes:
     race_confidence: float
 
 
-@dataclass
-class FaceData:
+class FaceData(BaseModel):
     """
     Represents the complete data for a detected face.
 
@@ -61,9 +64,11 @@ class FaceData:
         attributes (Attributes): Additional attributes of the detected face.
         group_id (Optional[int]): The group ID associated with the face (e.g., person ID).
         embedding (List[float]): The embedding vector representing the face.
+        url (str): The URL to access the face image in the browser.
     """
 
     face_id: str
+    url: Optional[str] = None
     face_path: str
     image_path: str
     bounding_box: BoundingBox
@@ -71,6 +76,46 @@ class FaceData:
     attributes: Attributes
     group_id: Optional[int]
     embedding: List[float]
+
+    @validator("embedding", pre=True)
+    def deserialize_embedding(cls, value):
+        """
+        Ensure the embedding field is deserialized into a list of floats.
+
+        Args:
+            value (Any): The value of the embedding field.
+
+        Returns:
+            List[float]: The deserialized embedding.
+        """
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON string for embedding")
+        return value
+
+    @validator("url", always=True, pre=True)
+    def generate_url(cls, _, values):
+        """
+        Generate a URL for the face image.
+
+        Args:
+            values (dict): The values of the model fields.
+
+        Returns:
+            str: The URL to access the face image.
+        """
+        image_path = values.get("image_path")
+        # Load environment variables from .env file
+        load_dotenv()
+
+        # Get HOST and PORT from environment variables
+        host = os.getenv("HOST", "localhost")
+        port = os.getenv("PORT", "8000")
+
+        # Construct the URL
+        return f"http://{host}:{port}{image_path.split('api')[1]}"
 
 
 @dataclass
