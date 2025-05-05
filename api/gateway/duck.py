@@ -1,12 +1,13 @@
 """
 duck.py
 
-This module provides the `FaceDataHandler` class for managing `FaceData` records stored in a DuckDB database.
+This module provides the `FaceDataHandler` and `PersonDataHandler` classes for managing `FaceData` and `Person` records stored in a DuckDB database.
 It includes methods for creating, reading, updating, deleting, and importing metadata, as well as
 utility functions for working with JSON files and logging.
 
 Classes:
     FaceDataHandler: A class for performing CRUD operations on a DuckDB database containing `FaceData` records.
+    PersonDataHandler: A class for performing CRUD operations on a DuckDB database containing `Person` records.
 """
 
 import json
@@ -117,7 +118,7 @@ class FaceDataHandler:
                     embedding_serialized,  # Store serialized embedding
                 ),
             )
-            logger.info(
+            logger.debug(
                 "Record with face_id '%s' created or updated successfully.",
                 face_data.face_id,
             )
@@ -269,19 +270,17 @@ class FaceDataHandler:
         json_files = self._get_json_files(metadata_folder)
         for file_path in json_files:
             try:
-                print(file_path)
                 json_data = self._load_json(file_path)
                 face_id = json_data.get("face_id")
                 if face_id:
                     face_data = self._convert_to_facedata(json_data)
                     self.create(face_data)
-                    logger.info(
+                    logger.debug(
                         "Imported record with face_id '%s' from %s", face_id, file_path
                     )
             except Exception as e:
                 logger.error("Failed to import file %s: %s", file_path, e)
-                exit()
-                continue  # Skip this file and continue with the next one
+                continue
         logger.info("Metadata import completed successfully.")
 
     @staticmethod
@@ -349,7 +348,7 @@ class FaceDataHandler:
                 ),
             )
 
-            logger.info(
+            logger.debug(
                 "Inserted JSON data into DuckDB database from file: %s", file_path
             )
             return json_data

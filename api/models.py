@@ -9,9 +9,10 @@ Classes:
     Attributes: Represents additional attributes of a detected face, such as race and confidence.
     FaceData: Represents the complete data for a detected face, including its embedding and metadata.
     PersonData: Represents the data for a person.
+    PaginatedPersonsResponse: Represents a paginated response for persons data.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, validator
@@ -64,18 +65,19 @@ class FaceData(BaseModel):
         attributes (Attributes): Additional attributes of the detected face.
         group_id (Optional[int]): The group ID associated with the face (e.g., person ID).
         embedding (List[float]): The embedding vector representing the face.
-        url (str): The URL to access the face image in the browser.
+        imageUrl (str): The URL to access the face image in the browser.
     """
 
     face_id: str
-    url: Optional[str] = None
     face_path: str
+    name: str = "Unknown"
     image_path: str
     bounding_box: BoundingBox
     face_confidence: float
     attributes: Attributes
     group_id: Optional[int]
     embedding: List[float]
+    imageUrl: Optional[str] = None
 
     @validator("embedding", pre=True)
     def deserialize_embedding(cls, value):
@@ -95,7 +97,7 @@ class FaceData(BaseModel):
                 raise ValueError("Invalid JSON string for embedding")
         return value
 
-    @validator("url", always=True, pre=True)
+    @validator("imageUrl", always=True, pre=True)
     def generate_url(cls, _, values):
         """
         Generate a URL for the face image.
@@ -124,9 +126,17 @@ class PersonData:
     Represents the data for a person.
 
     Attributes:
-        person_id (int): The unique identifier for the person.
+        person_id (str): The unique identifier for the person.
         person_name (str): The name of the person.
+        face_ids (List[str]): A list of face IDs associated with the person.
     """
 
-    person_id: int
+    person_id: str  # Change from int to str
     person_name: str
+    face_ids: List[str] = field(default_factory=list)
+    image_url: Optional[str] = None
+
+
+class PaginatedPersonsResponse(BaseModel):
+    persons: List[PersonData]
+    total_pages: int  # Ensure this is an integer

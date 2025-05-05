@@ -19,18 +19,19 @@ Classes:
 
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Any
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from gateway.duck import FaceDataHandler  # Updated to use FaceDataHandler from duck.py
-from gateway.people import PersonDataHandler
-from models import FaceData, PersonData
+from gateway.persons import PersonDataHandler
+from models import FaceData, PersonData, PaginatedPersonsResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +42,7 @@ load_dotenv()
 
 # Fetch the DuckDB database file path from the .env file
 FACES_DB_PATH = os.getenv("FACES_DB_PATH", "faces.duckdb")
-PEOPLE_PICKLE_FILE_PATH = os.getenv("PEOPLE_PICKLE_FILE_PATH", "people.pkl")
+PERSONS_DB_PATH = FACES_DB_PATH
 
 API_DESCRIPTION = """
 This API provides a comprehensive solution for managing face data, including operations for accounts, faces, and people, as well as health checks. It is built using FastAPI and leverages a DuckDB database for data storage and retrieval. Below is a detailed description of the API's functionality:
@@ -95,6 +96,17 @@ app = FastAPI(
     version=os.getenv("API_VERSION", "0.1"),
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*"
+    ],  # Allow all origins. Replace with specific origins for better security.
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
+
 # Bearer token authentication
 security = HTTPBearer()
 
@@ -102,7 +114,7 @@ security = HTTPBearer()
 accounts_router = APIRouter(prefix="/accounts", tags=["Accounts"])
 faces_router = APIRouter(prefix="/faces", tags=["Faces"])
 people_router = APIRouter(prefix="/people", tags=["People"])
-health_router = APIRouter(prefix="/health", tags=["Health"])
+health_router = APIRouter(prefix="/Health", tags=["Health"])
 
 
 # Request and Response Models
@@ -283,7 +295,7 @@ async def get_face(face_id: str = Path(...)):
 
 @faces_router.get(
     "/",
-    response_model=List[FaceData],
+    response_model=Dict[str, Any],  # Update response model to include total_pages
     responses={400: {"model": Error}},
 )
 async def get_all_faces(
@@ -297,16 +309,23 @@ async def get_all_faces(
         page_length (int): The number of records per page (default is 10).
 
     Returns:
-        List[FaceData]: A list of face data.
+        Dict[str, Any]: A dictionary containing the paginated face data and total pages.
     """
     try:
         faces = FaceDataHandler(FACES_DB_PATH).read_all()
+        total_faces = len(faces)
+        total_pages = (
+            total_faces + page_length - 1
+        ) // page_length  # Calculate total pages
 
         # Calculate offset based on page_number and page_length
         offset = (page_number - 1) * page_length
         paginated_faces = faces[offset : offset + page_length]
 
-        return paginated_faces
+        return {
+            "faces": paginated_faces,
+            "total_pages": total_pages,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -381,9 +400,43 @@ async def delete_face(face_id: str = Path(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@faces_router.get(
+    "/group/{group_id}",
+    response_model=List[FaceData],  # The response will be a list of FaceData
+    responses={404: {"model": Error}},
+)
+async def get_faces_by_group_id(group_id: str):
+    """
+    Retrieve all faces by matching group_id.
+
+    Args:
+        group_id (str): The group ID to match.
+
+    Returns:
+        List[FaceData]: A list of faces matching the group_id.
+    """
+    try:
+        # Fetch all faces from the database
+        faces = FaceDataHandler(FACES_DB_PATH).read_all()
+
+        # Filter faces by group_id
+        matching_faces = [face for face in faces if str(face.group_id) == group_id]
+
+        if not matching_faces:
+            raise HTTPException(
+                status_code=404, detail="No faces found for the given group_id"
+            )
+
+        return matching_faces
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # People Endpoints
 @people_router.get(
-    "/", response_model=Dict[str, List[PersonData]], responses={400: {"model": Error}}
+    "/",
+    response_model=PaginatedPersonsResponse,  # Use the updated response model
+    responses={400: {"model": Error}},
 )
 async def get_persons(
     page_number: int = Query(1, ge=1), page_length: int = Query(10, ge=1)
@@ -396,18 +449,44 @@ async def get_persons(
         page_length (int): The number of records per page (default is 10).
 
     Returns:
-        Dict[str, List[PersonData]]: A dictionary containing the paginated person data.
+        PaginatedPersonsResponse: A dictionary containing the paginated person data and total pages.
     """
     try:
-        people = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH).read_all()
-        people_list = list(people.values())
+        people = PersonDataHandler(PERSONS_DB_PATH).read_all()
+        logger.info("Retrieved %d persons from the database.", len(people))
+
+        people_list = []
+
+        for person in people:
+            face = FaceDataHandler(FACES_DB_PATH).read(person["face_ids"][0])
+            if not face:
+                raise HTTPException(status_code=404, detail="Face not found")
+            people_list.append(
+                PersonData(
+                    person_id=person["id"],  # Map `id` to `person_id`
+                    person_name=person["name"],  # Map `name` to `person_name`
+                    face_ids=person["face_ids"],
+                    image_url=face.imageUrl,
+                )
+            )
+
+        # Map database fields to the PersonData model
 
         # Calculate offset based on page_number and page_length
         offset = (page_number - 1) * page_length
         paginated_people = people_list[offset : offset + page_length]
+        total_pages = (
+            len(people_list) + page_length - 1
+        ) // page_length  # Calculate total pages
+
+        logger.info("Total pages: %d", total_pages)
+        logger.info("Page number: %d", page_number)
+        logger.info("Page length: %d", page_length)
 
         # Return the result as a dictionary
-        return {"persons": paginated_people}
+        return PaginatedPersonsResponse(
+            persons=paginated_people, total_pages=total_pages
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -430,9 +509,18 @@ async def get_person(person_id: int):
         Dict[str, List[PersonData]]: A dictionary containing the person data as a list.
     """
     try:
-        person = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH).read(person_id)
-        if not person:
+        result = PersonDataHandler(PERSONS_DB_PATH).read(person_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Person not found")
+        face = FaceDataHandler(FACES_DB_PATH).read(result["face_ids"][0])
+        if not face:
+            raise HTTPException(status_code=404, detail="Face not found")
+        person = PersonData(
+            person_id=result["id"],  # Map `id` to `person_id`
+            person_name=result["name"],  # Map `name` to `person_name`
+            face_ids=result["face_ids"],
+            image_url=face.imageUrl,
+        )
 
         # Wrap the single PersonData object in a list
         return {"people": [person]}
@@ -457,7 +545,7 @@ async def get_person_faces(person_id: int = Path(...)):
     """
 
     try:
-        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud = PersonDataHandler(PERSONS_DB_PATH)
         person_faces = crud.read(person_id)
         if person_faces is None:
             raise HTTPException(status_code=404, detail="Person not found")
@@ -482,7 +570,7 @@ async def create_person(person_name: str):
         # Simulate creating a person (e.g., adding metadata to the pickle file)
         # This is a placeholder for actual logic
         logger.info("Creating person with name %s", person_name)
-        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud = PersonDataHandler(PERSONS_DB_PATH)
         person = crud.create(person_name)
         logger.info(
             "Created person with ID %s and name %s",
@@ -509,7 +597,7 @@ async def update_person(person_id: int, person_name: str):
         Success: The response containing the person ID and processing time.
     """
     try:
-        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud = PersonDataHandler(PERSONS_DB_PATH)
         crud.update(person_id, PersonData(person_id=person_id, person_name=person_name))
         logger.info("Updated person with ID %s to name %s", person_id, person_name)
         return {"account_id": person_id, "processing_time": 0.1}
@@ -531,12 +619,49 @@ async def delete_person(person_id: int = Path(...)):
         DeletedFaces: The response containing the number of deletions and processing time.
     """
     try:
-        crud = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+        crud = PersonDataHandler(PERSONS_DB_PATH)
         crud.delete(person_id)
         logger.info("Deleted person with ID %s", person_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@people_router.get(
+    "/name/{name}",
+    response_model=List[PersonData],  # The response will be a list of PersonData
+    responses={404: {"model": Error}},
+)
+async def get_persons_by_name(name: str):
+    """
+    Retrieve all persons filtered by name.
+
+    Args:
+        name (str): The name to filter persons by.
+
+    Returns:
+        List[PersonData]: A list of persons matching the given name.
+    """
+    try:
+        # Use the read_by_name method to fetch persons by name
+        persons = PersonDataHandler(PERSONS_DB_PATH).read_by_name(name)
+
+        if not persons:
+            raise HTTPException(
+                status_code=404, detail="No persons found with the given name"
+            )
+
+        # Map the results to the PersonData model
+        return [
+            PersonData(
+                person_id=person["id"],
+                person_name=person["name"],
+                face_ids=person["face_ids"],
+            )
+            for person in persons
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # Health Check Endpoint
@@ -572,17 +697,11 @@ def main():
     people_file_path = "data/test_names_10000.txt"
 
     faces_data_handler = FaceDataHandler(FACES_DB_PATH)
-    people_data_handler = PersonDataHandler(PEOPLE_PICKLE_FILE_PATH)
+    people_data_handler = PersonDataHandler(FACES_DB_PATH)
 
     # Import metadata using the new method
 
-    # Ensure the DuckDB database file exists
-
-    if not os.path.exists(FACES_DB_PATH):
-        logger.warning(
-            "Database file %s does not exist. Creating a new one.", FACES_DB_PATH
-        )
-        faces_data_handler.import_metadata(metadata_folder)
+    # faces_data_handler.import_metadata(metadata_folder)
 
     # people_ids = faces_data_handler.get_all_group_ids()
     # people_data_handler.generate_people_data(people_ids, people_file_path)
