@@ -12,12 +12,13 @@ Classes:
     PaginatedPersonsResponse: Represents a paginated response for persons data.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional
-from dotenv import load_dotenv
-from pydantic import BaseModel, validator
 import json
 import os
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, validator
 
 
 @dataclass

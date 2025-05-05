@@ -1,8 +1,9 @@
-import os
 import json
 import logging
+import os
 from collections import defaultdict
 from typing import List
+
 import duckdb
 
 # Configure logging

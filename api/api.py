@@ -1,37 +1,24 @@
 """
 api.py
 
-This module provides the FastAPI application for managing face data. It includes endpoints for accounts, faces,
-people, and health checks. The API uses a DuckDB database to store and retrieve face data.
-
-Modules:
-    - Accounts: Manage account-related operations.
-    - Faces: Manage face-related operations.
-    - People: Manage person-related operations.
-    - Health: Check the health of the API.
-
-Classes:
-    CreateAccount: Request model for creating an account.
-    Success: Response model for successful operations.
-    Error: Response model for errors.
-    DeletedFaces: Response model for deleted faces.
+This module provides the FastAPI application for managing face data.
 """
 
 import logging
 import os
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from gateway.duck import FaceDataHandler  # Updated to use FaceDataHandler from duck.py
 from gateway.persons import PersonDataHandler
-from models import FaceData, PersonData, PaginatedPersonsResponse
+from models import FaceData, PaginatedPersonsResponse, PersonData
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -45,44 +32,7 @@ FACES_DB_PATH = os.getenv("FACES_DB_PATH", "faces.duckdb")
 PERSONS_DB_PATH = FACES_DB_PATH
 
 API_DESCRIPTION = """
-This API provides a comprehensive solution for managing face data, including operations for accounts, faces, and people, as well as health checks. It is built using FastAPI and leverages a DuckDB database for data storage and retrieval. Below is a detailed description of the API's functionality:
-
-### Features:
-1. **Accounts Management**:
-    - Retrieve all account IDs.
-    - Retrieve details of a specific account by ID.
-    - Create a new account.
-    - Update an existing account's details.
-    - Delete an account by ID.
-
-2. **Faces Management**:
-    - Retrieve face data by face ID.
-    - Retrieve all face data with pagination support.
-    - Delete a face by ID.
-
-3. **People Management**:
-    - Retrieve all person IDs with pagination support.
-    - Retrieve all faces associated with a specific person ID.
-    - Create a new person with a unique ID and name.
-    - Update an existing person's details.
-    - Delete a person by ID.
-
-4. **Health Check**:
-    - Verify the health of the API and its ability to access the DuckDB database.
-
-
-### Additional Details:
-- **Environment Variables**:
-  - `FACES_DB_PATH`: Path to the DuckDB database file for face data storage.
-  - `API_TITLE`: Title of the API.
-  - `API_DESCRIPTION`: Description of the API.
-  - `API_VERSION`: Version of the API.
-
-- **Logging**:
-  - The API uses Python's logging module to log important events and errors.
-
-- **Pagination**:
-  - Pagination is supported for retrieving faces and person IDs, allowing efficient data retrieval.
+TBD
 
 """
 
@@ -174,7 +124,7 @@ async def get_all_accounts():
         accounts = ["account1", "account2", "account3"]  # Example data
         return {"accounts": accounts}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @accounts_router.get(
@@ -200,7 +150,7 @@ async def get_account(account_id: str = Path(...)):
         }  # Example data
         return account_data
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @accounts_router.post("/", response_model=Success, responses={400: {"model": Error}})
@@ -220,7 +170,7 @@ async def create_account(account: CreateAccount):
         logger.info("Creating account with ID %s", account.account_id)
         return {"account_id": account.account_id, "processing_time": 0.1}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @accounts_router.put(
@@ -243,7 +193,7 @@ async def update_account(account_id: str, account_name: str):
         logger.info("Updating account with ID %s to name %s", account_id, account_name)
         return {"account_id": account_id, "processing_time": 0.1}
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @accounts_router.delete(
@@ -265,7 +215,7 @@ async def delete_account(account_id: str = Path(...)):
         logger.info("Deleting account with ID %s", account_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 # Faces Endpoints
@@ -290,7 +240,7 @@ async def get_face(face_id: str = Path(...)):
             raise HTTPException(status_code=404, detail="Face not found")
         return face_data
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @faces_router.get(
@@ -327,7 +277,7 @@ async def get_all_faces(
             "total_pages": total_pages,
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @faces_router.post(
@@ -350,7 +300,7 @@ async def create_face(face_data: FaceData):
         logger.info("Created face with ID %s", face_data.face_id)
         return {"account_id": face_data.face_id, "processing_time": 0.1}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @faces_router.put(
@@ -374,7 +324,7 @@ async def update_face(face_id: str, face_data: FaceData):
         logger.info("Updated face with ID %s", face_id)
         return {"account_id": face_id, "processing_time": 0.1}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @faces_router.delete(
@@ -397,7 +347,7 @@ async def delete_face(face_id: str = Path(...)):
         logger.info("Deleted face with ID %s", face_id)
         return {"deletions": 1, "processing_time": 0.1}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @faces_router.get(
@@ -429,7 +379,7 @@ async def get_faces_by_group_id(group_id: str):
 
         return matching_faces
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # People Endpoints
@@ -488,7 +438,7 @@ async def get_persons(
             persons=paginated_people, total_pages=total_pages
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @people_router.get(
@@ -525,7 +475,7 @@ async def get_person(person_id: int):
         # Wrap the single PersonData object in a list
         return {"people": [person]}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @people_router.get(
@@ -551,7 +501,7 @@ async def get_person_faces(person_id: int = Path(...)):
             raise HTTPException(status_code=404, detail="Person not found")
         return {"faces": person_faces}
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @people_router.post("/", response_model=Success, responses={400: {"model": Error}})
@@ -579,7 +529,7 @@ async def create_person(person_name: str):
         )
         return {"account_id": person.person_id, "processing_time": 0.1}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @people_router.put(
@@ -602,7 +552,7 @@ async def update_person(person_id: int, person_name: str):
         logger.info("Updated person with ID %s to name %s", person_id, person_name)
         return {"account_id": person_id, "processing_time": 0.1}
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @people_router.delete(
@@ -624,7 +574,7 @@ async def delete_person(person_id: int = Path(...)):
         logger.info("Deleted person with ID %s", person_id)
         return {"deletions": 1, "processing_time": 0.1}
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @people_router.get(
@@ -661,7 +611,71 @@ async def get_persons_by_name(name: str):
             for person in persons
         ]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@people_router.get(
+    "/{person_id}/history",
+    response_model=List[Dict[str, Any]],
+    responses={404: {"model": Error}},
+)
+async def get_person_version_history(id: str):
+    """
+    Get the version history of a specific person.
+
+    Args:
+        id (str): The unique ID of the person.
+
+    Returns:
+        List[Dict[str, Any]]: A list of version history records for the person.
+    """
+    try:
+        # Simulate fetching version history (replace with actual logic)
+        history = [
+            {"version": 1, "name": "John Doe", "timestamp": "2025-01-01T12:00:00Z"},
+            {
+                "version": 2,
+                "name": "Johnathan Doe",
+                "timestamp": "2025-02-01T12:00:00Z",
+            },
+        ]
+        return history
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# Matches Endpoints
+@people_router.get(
+    "/{person_id}/matches",
+    response_model=List[PersonData],
+    responses={404: {"model": Error}},
+)
+async def list_persons_in_match(id: str):
+    """
+    List all persons in a specific match.
+
+    Args:
+        id (str): The unique ID of the match.
+
+    Returns:
+        List[PersonData]: A list of persons in the match.
+    """
+    try:
+        # Simulate fetching persons in a match (replace with actual logic)
+        persons_in_match = [
+            {"id": "123", "name": "John Doe", "face_ids": ["face_id_1", "face_id_2"]},
+            {"id": "456", "name": "Jane Doe", "face_ids": ["face_id_3"]},
+        ]
+        return [
+            PersonData(
+                person_id=person["id"],
+                person_name=person["name"],
+                face_ids=person["face_ids"],
+            )
+            for person in persons_in_match
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # Health Check Endpoint
@@ -679,12 +693,12 @@ async def health_check():
         ).read_all()  # Test if the DuckDB database is accessible
         return {"status": "healthy"}
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Health check failed: {str(e)}") from e
 
 
 # Include routers in the main app
-app.include_router(accounts_router)
-app.include_router(faces_router)
+# app.include_router(accounts_router)
+# app.include_router(faces_router)
 app.include_router(people_router)
 app.include_router(health_router)
 
