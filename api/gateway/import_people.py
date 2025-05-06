@@ -2,7 +2,6 @@ import os
 import json
 import logging
 from collections import defaultdict
-from typing import List
 import duckdb
 
 # Configure logging
