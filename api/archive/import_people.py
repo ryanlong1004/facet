@@ -1,7 +1,11 @@
-import os
 import json
 import logging
+import os
 from collections import defaultdict
+<<<<<<< HEAD:api/gateway/import_people.py
+=======
+
+>>>>>>> update/remove_faces_endpoint:api/archive/import_people.py
 import duckdb
 
 # Configure logging
@@ -66,6 +70,8 @@ def populate_persons_table(db_path: str, metadata_folder: str):
                     name = os.path.basename(os.path.dirname(image_path))
 
                     # Add the face_id to the group_id entry
+                    if persons_data[group_id]["face_ids"] is None:
+                        persons_data[group_id]["face_ids"] = []
                     persons_data[group_id]["face_ids"].append(face_id)
 
                     # Set the name for the group_id (if not already set)
@@ -90,7 +96,7 @@ def populate_persons_table(db_path: str, metadata_folder: str):
                 "Inserted group_id '%s' with name '%s' and %d face_ids.",
                 group_id,
                 data["name"],
-                len(data["face_ids"]),
+                len(data["face_ids"]) if data["face_ids"] is not None else 0,
             )
         except Exception as e:
             logger.error("Error inserting group_id '%s': %s", group_id, e)

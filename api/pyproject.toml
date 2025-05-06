@@ -10,5 +10,6 @@ dependencies = [
     "kagglehub>=0.3.11",
     "pydantic>=2.11.3",
     "python-dotenv>=1.1.0",
+    "typer>=0.15.3",
     "uvicorn>=0.34.1",
 ]
