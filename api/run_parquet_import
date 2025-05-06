@@ -1,0 +1,1 @@
+./scripts/parquet_import.py group_job/faces.parquet faces.duckdb persons
