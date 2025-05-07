@@ -143,15 +143,20 @@ class DuckDbGateway:
         query = "SELECT * FROM persons WHERE person_id = ?"
         return self._execute_query_single(query, [person_id])
 
-    def get_all_persons(self) -> List[Dict[str, Any]]:
+    def get_all_persons(self, page: int, length: int) -> List[Dict[str, Any]]:
         """
-        Retrieve all person records from the `persons` table.
+        Retrieve all person records from the `persons` table with pagination.
+
+        Args:
+            page (int): The page number (1-based index).
+            length (int): The number of records per page.
 
         Returns:
-            List[Dict[str, Any]]: A list of all person records as dictionaries.
+            List[Dict[str, Any]]: A list of person records as dictionaries.
         """
-        query = "SELECT * FROM persons"
-        return self._execute_query(query)
+        offset = (page - 1) * length  # Calculate offset based on page and length
+        query = "SELECT * FROM persons LIMIT ? OFFSET ?"
+        return self._execute_query(query, [length, offset])
 
     def update_person(self, person_id: str, updates: Dict[str, Any]) -> None:
         """
@@ -174,3 +179,16 @@ class DuckDbGateway:
         """
         query = "DELETE FROM persons WHERE person_id = ?"
         self._execute_write_query(query, [person_id])
+
+    def get_total_persons_count(self) -> int:
+        """
+        Retrieve the total number of person records in the `persons` table.
+
+        Returns:
+            int: The total count of person records.
+        """
+        query = "SELECT COUNT(*) AS total FROM persons"
+        result = self._execute_query_single(query)
+        if result is None:
+            raise RuntimeError("Failed to retrieve total count from the database.")
+        return result["total"]
