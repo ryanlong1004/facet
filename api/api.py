@@ -115,6 +115,51 @@ async def delete_person(person_id: str):
     return {"message": f"Person with ID {person_id} deleted successfully."}
 
 
+@persons_router.get("/{id}/faces", response_model=List[Any])
+async def list_faces_for_person(id: str):
+    """
+    List faces associated with a person.
+
+    Args:
+        id (str): The unique ID of the person.
+
+    Returns:
+        List[Any]: A list of faces associated with the person.
+    """
+    # Stub implementation
+    return [{"face_id": "face_001", "image_name": "image_001.jpg"}]
+
+
+@persons_router.get("/{id}/history", response_model=List[Any])
+async def get_person_version_history(id: str):
+    """
+    Get version history for a person.
+
+    Args:
+        id (str): The unique ID of the person.
+
+    Returns:
+        List[Any]: A list of version history records for the person.
+    """
+    # Stub implementation
+    return [{"version": 1, "updated_at": "2023-01-01T12:00:00Z"}]
+
+
+@persons_router.get("/matches/{id}/persons", response_model=List[Any])
+async def list_persons_in_match(id: str):
+    """
+    List persons in a match.
+
+    Args:
+        id (str): The unique ID of the match.
+
+    Returns:
+        List[Any]: A list of persons in the match.
+    """
+    # Stub implementation
+    return [{"person_id": "person_001", "name": "John Doe"}]
+
+
 # Include the router in the main app
 app.include_router(persons_router)
 
