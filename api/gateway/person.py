@@ -56,8 +56,10 @@ class DuckDbGateway:
             List[Dict[str, Any]]: The query results as a list of dictionaries.
         """
         self._ensure_connection()
-        cursor = self.conn.execute(query, params or [])  # type: ignore
-        columns = [desc[0] for desc in cursor.description]  # type: ignore
+        assert self.conn is not None, "Database connection is not initialized."
+        cursor = self.conn.execute(query, params or [])
+        assert cursor.description is not None, "Cursor is not initialized."
+        columns = [desc[0] for desc in cursor.description]
         results = cursor.fetchall()
         return [dict(zip(columns, row)) for row in results]
 
@@ -75,10 +77,24 @@ class DuckDbGateway:
             Optional[Dict[str, Any]]: The query result as a dictionary, or None if no result is found.
         """
         self._ensure_connection()
-        cursor = self.conn.execute(query, params or [])  # type: ignore
-        columns = [desc[0] for desc in cursor.description]  # type: ignore
+        assert self.conn is not None, "Database connection is not initialized."
+        cursor = self.conn.execute(query, params or [])
+        assert cursor.description is not None, "Cursor is not initialized."
+        columns = [desc[0] for desc in cursor.description]
         result = cursor.fetchone()
         return dict(zip(columns, result)) if result else None
+
+    def _execute_write_query(self, query: str, params: List[Any]) -> None:
+        """
+        Execute a write query (INSERT, UPDATE, DELETE).
+
+        Args:
+            query (str): The SQL query to execute.
+            params (List[Any]): The parameters for the query.
+        """
+        self._ensure_connection()
+        assert self.conn is not None, "Database connection is not initialized."
+        self.conn.execute(query, params)
 
     def create_person(self, person_data: Dict[str, Any]) -> None:
         """
@@ -95,8 +111,7 @@ class DuckDbGateway:
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        self._ensure_connection()
-        self.conn.execute(  # type: ignore
+        self._execute_write_query(
             query,
             [
                 person_data["face_id"],
@@ -148,8 +163,7 @@ class DuckDbGateway:
         """
         set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
         query = f"UPDATE persons SET {set_clause} WHERE person_id = ?"
-        self._ensure_connection()
-        self.conn.execute(query, list(updates.values()) + [person_id])  # type: ignore
+        self._execute_write_query(query, list(updates.values()) + [person_id])
 
     def delete_person(self, person_id: str) -> None:
         """
@@ -159,5 +173,4 @@ class DuckDbGateway:
             person_id (str): The unique ID of the person to delete.
         """
         query = "DELETE FROM persons WHERE person_id = ?"
-        self._ensure_connection()
-        self.conn.execute(query, [person_id])  # type: ignore
+        self._execute_write_query(query, [person_id])

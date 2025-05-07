@@ -2,19 +2,18 @@
 Defines the Person model for representing person records.
 """
 
-from typing import Any, Dict
-
+from typing import Any, Dict, Optional
 from pydantic import BaseModel
 
 
 class Person(BaseModel):
     """
-    Represents a face record.
+    Represents a person record.
     """
 
     face_id: str
     person_id: int
-    person_tag: str | None
+    person_tag: Optional[str]
     image_name: str
     face_path: str
     thumbnail_path: str
@@ -46,18 +45,4 @@ class Person(BaseModel):
         Returns:
             Dict[str, Any]: The dictionary representation of the Person object.
         """
-        return {
-            "face_id": self.face_id,
-            "person_id": self.person_id,
-            "person_tag": self.person_tag,
-            "image_name": self.image_name,
-            "face_path": self.face_path,
-            "thumbnail_path": self.thumbnail_path,
-            "metadata_path": self.metadata_path,
-            "confidence": self.confidence,
-            "blur_effect": self.blur_effect,
-            "bounding_box": self.bounding_box,
-            "attributes": self.attributes,
-            "embedding": self.embedding,
-            "user_updated": self.user_updated,
-        }
+        return self.model_dump()

@@ -6,11 +6,11 @@ This module provides the FastAPI application for managing person data.
 
 import logging
 import os
-from typing import List, Callable, Any
+from typing import List, Any
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException, Path
+from fastapi import APIRouter, FastAPI, HTTPException
 
 from gateway.person import DuckDbGateway
 from model.person import Person
@@ -115,7 +115,7 @@ async def delete_person(person_id: str):
     return {"message": f"Person with ID {person_id} deleted successfully."}
 
 
-@persons_router.get("/{id}/faces", response_model=List[Any])
+@persons_router.get("/{id}/faces", response_model=List[Any], deprecated=True)
 async def list_faces_for_person(id: str):
     """
     List faces associated with a person.
