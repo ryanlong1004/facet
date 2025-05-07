@@ -13,7 +13,10 @@ class Person(BaseModel):
 
     face_id: str
     person_id: int
-    person_tag: Optional[Any]
+    person_tag: Optional[str]
+    """
+    An optional tag associated with the person, represented as a string.
+    """
     image_name: str
     face_path: str
     thumbnail_path: str
