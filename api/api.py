@@ -6,7 +6,7 @@ This module provides the FastAPI application for managing person data.
 
 import logging
 import os
-from typing import List
+from typing import List, Callable, Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -36,117 +36,83 @@ app = FastAPI(
 persons_router = APIRouter(prefix="/persons", tags=["Persons"])
 
 
+def handle_gateway_operation(operation, *args, model=None, **kwargs):
+    """
+    Helper function to handle DuckDbGateway operations with centralized exception handling.
+
+    Args:
+        operation (Callable): The DuckDbGateway method to call.
+        *args: Positional arguments for the operation.
+        model (Optional[Type[BaseModel]]): The Pydantic model to convert the result to.
+        **kwargs: Keyword arguments for the operation.
+
+    Returns:
+        Any: The result of the operation, optionally converted to a Pydantic model.
+    """
+    try:
+        with DuckDbGateway(DB_PATH) as gateway:
+            result = operation(gateway, *args, **kwargs)
+            if model and result:
+                if isinstance(result, list):
+                    return [model.from_dict(item) for item in result]
+                return model.from_dict(result)
+            return result
+    except Exception as e:
+        logger.error("Error during gateway operation: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
 # CRUD Endpoints for Persons
 @persons_router.get("/", response_model=List[Person])
 async def get_all_persons():
     """
     Retrieve all persons.
-
-    Returns:
-        List[Person]: A list of all persons.
     """
-    try:
-        with DuckDbGateway(DB_PATH) as gateway:
-            persons = (
-                gateway.get_all_persons()
-            )  # Assuming `get_all_faces` is used for persons
-            return [Person.from_dict(person) for person in persons]
-    except Exception as e:
-        logger.error("Error retrieving all persons: %s", e)
-        raise HTTPException(status_code=500, detail="Error retrieving persons") from e
+    return handle_gateway_operation(
+        lambda gateway: gateway.get_all_persons(), model=Person
+    )
 
 
 @persons_router.get("/{person_id}", response_model=Person)
-async def get_person(
-    person_id: str = Path(..., description="The ID of the person to retrieve"),
-):
+async def get_person(person_id: str):
     """
     Retrieve a person by their ID.
-
-    Args:
-        person_id (str): The unique ID of the person.
-
-    Returns:
-        Person: The person data.
     """
-    try:
-        with DuckDbGateway(DB_PATH) as gateway:
-            person_data = gateway.get_person(
-                person_id
-            )  # Assuming `get_face` is used for persons
-            if not person_data:
-                raise HTTPException(status_code=404, detail="Person not found")
-            return Person.from_dict(person_data)
-    except Exception as e:
-        logger.error("Error retrieving person with ID %s: %s", person_id, e)
-        raise HTTPException(status_code=500, detail="Error retrieving person") from e
+    person = handle_gateway_operation(
+        lambda gateway: gateway.get_person(person_id), model=Person
+    )
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person
 
 
 @persons_router.post("/", response_model=Person)
 async def create_person(person: Person):
     """
     Create a new person.
-
-    Args:
-        person (Person): The person data to create.
-
-    Returns:
-        Person: The created person data.
     """
-    try:
-        with DuckDbGateway(DB_PATH) as gateway:
-            gateway.create_person(
-                person.to_dict()
-            )  # Assuming `create_face` is used for persons
-            return person
-    except Exception as e:
-        logger.error("Error creating person: %s", e)
-        raise HTTPException(status_code=500, detail="Error creating person") from e
+    handle_gateway_operation(lambda gateway: gateway.create_person(person.to_dict()))
+    return person
 
 
 @persons_router.put("/{person_id}", response_model=Person)
 async def update_person(person_id: str, person: Person):
     """
     Update an existing person.
-
-    Args:
-        person_id (str): The unique ID of the person.
-        person (Person): The updated person data.
-
-    Returns:
-        Person: The updated person data.
     """
-    try:
-        with DuckDbGateway(DB_PATH) as gateway:
-            gateway.update_person(
-                person_id, person.to_dict()
-            )  # Assuming `update_face` is used for persons
-            return person
-    except Exception as e:
-        logger.error("Error updating person with ID %s: %s", person_id, e)
-        raise HTTPException(status_code=500, detail="Error updating person") from e
+    handle_gateway_operation(
+        lambda gateway: gateway.update_person(person_id, person.to_dict())
+    )
+    return person
 
 
 @persons_router.delete("/{person_id}")
 async def delete_person(person_id: str):
     """
     Delete a person by their ID.
-
-    Args:
-        person_id (str): The unique ID of the person.
-
-    Returns:
-        Dict[str, str]: A confirmation message.
     """
-    try:
-        with DuckDbGateway(DB_PATH) as gateway:
-            gateway.delete_person(
-                person_id
-            )  # Assuming `delete_face` is used for persons
-            return {"message": f"Person with ID {person_id} deleted successfully."}
-    except Exception as e:
-        logger.error("Error deleting person with ID %s: %s", person_id, e)
-        raise HTTPException(status_code=500, detail="Error deleting person") from e
+    handle_gateway_operation(lambda gateway: gateway.delete_person(person_id))
+    return {"message": f"Person with ID {person_id} deleted successfully."}
 
 
 # Include the router in the main app
@@ -154,6 +120,20 @@ app.include_router(persons_router)
 
 
 def main():
+    """
+    Entry point for running the application.
+
+    This function retrieves the host and port configuration from environment
+    variables, with default values of "0.0.0.0" for the host and 8000 for the port.
+    It then starts the application using Uvicorn.
+
+    Environment Variables:
+        HOST (str): The hostname or IP address to bind the server to. Defaults to "0.0.0.0".
+        PORT (int): The port number to bind the server to. Defaults to 8000.
+
+    Returns:
+        None
+    """
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host=host, port=port)
