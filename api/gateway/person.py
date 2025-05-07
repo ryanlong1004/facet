@@ -189,5 +189,6 @@ class DuckDbGateway:
         """
         query = "SELECT COUNT(*) AS total FROM persons"
         result = self._execute_query_single(query)
-        assert result is not None, "Failed to retrieve total count"
+        if result is None:
+            raise RuntimeError("Failed to retrieve total count from the database.")
         return result["total"]
