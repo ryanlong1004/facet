@@ -6,11 +6,12 @@ This module provides the FastAPI application for managing person data.
 
 import logging
 import os
-from typing import List, Any
+from typing import List, Any, Dict
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from gateway.person import DuckDbGateway
 from model.person import Person
@@ -30,6 +31,17 @@ app = FastAPI(
     title="Person API",
     description="API for managing person data.",
     version="1.0.0",
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*"
+    ],  # Allows all origins. Replace with specific origins for better security.
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods.
+    allow_headers=["*"],  # Allows all headers.
 )
 
 # Initialize API router
@@ -63,14 +75,41 @@ def handle_gateway_operation(operation, *args, model=None, **kwargs):
 
 
 # CRUD Endpoints for Persons
-@persons_router.get("/", response_model=List[Person])
-async def get_all_persons():
+@persons_router.get("/", response_model=Dict[str, Any])
+async def get_all_persons(page: int = Query(1, ge=1), length: int = Query(10, ge=1)):
     """
-    Retrieve all persons.
+    Retrieve all persons with pagination.
+
+    Args:
+        page (int): The page number (1-based index). Defaults to 1.
+        length (int): The number of records per page. Defaults to 10.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the paginated list of persons and metadata.
     """
-    return handle_gateway_operation(
-        lambda gateway: gateway.get_all_persons(), model=Person
+    # Fetch paginated data and total count
+    result = handle_gateway_operation(
+        lambda gateway: {
+            "data": gateway.get_all_persons(page=page, length=length),
+            "total_count": gateway.get_total_persons_count(),
+        }
     )
+
+    # Ensure result is a dictionary with the expected structure
+    if not isinstance(result, dict) or "data" not in result or "total_count" not in result:
+        raise HTTPException(status_code=500, detail="Invalid data format from gateway")
+
+    # Calculate total pages
+    total_count = result["total_count"]
+    total_pages = (total_count + length - 1) // length  # Ceiling division
+
+    return {
+        "data": result["data"],
+        "page": page,
+        "length": length,
+        "total_pages": total_pages,
+        "total_count": total_count,
+    }
 
 
 @persons_router.get("/{person_id}", response_model=Person)

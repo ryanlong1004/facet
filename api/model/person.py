@@ -13,7 +13,7 @@ class Person(BaseModel):
 
     face_id: str
     person_id: int
-    person_tag: Optional[str]
+    person_tag: Optional[Any]
     image_name: str
     face_path: str
     thumbnail_path: str
