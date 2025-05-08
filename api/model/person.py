@@ -3,6 +3,7 @@ Defines the Person model for representing person records.
 """
 
 from typing import Any, Dict, Optional
+
 from pydantic import BaseModel
 
 

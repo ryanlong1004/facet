@@ -6,12 +6,14 @@ This module provides the FastAPI application for managing person data.
 
 import logging
 import os
-from typing import List, Any, Dict
+from pathlib import Path
+from typing import Any, Dict, List
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from gateway.person import DuckDbGateway
 from model.person import Person
@@ -25,6 +27,9 @@ load_dotenv()
 
 # Fetch the DuckDB database file path from the .env file
 DB_PATH = os.getenv("DB_PATH", "faces.duckdb")
+
+# Directory containing the face_groups files
+FACE_GROUPS_DIR = Path("/Users/rlong/Sandbox/facet/api/group_job/face_groups")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -96,7 +101,11 @@ async def get_all_persons(page: int = Query(1, ge=1), length: int = Query(10, ge
     )
 
     # Ensure result is a dictionary with the expected structure
-    if not isinstance(result, dict) or "data" not in result or "total_count" not in result:
+    if (
+        not isinstance(result, dict)
+        or "data" not in result
+        or "total_count" not in result
+    ):
         raise HTTPException(status_code=500, detail="Invalid data format from gateway")
 
     # Calculate total pages
@@ -197,6 +206,47 @@ async def list_persons_in_match(id: str):
     """
     # Stub implementation
     return [{"person_id": "person_001", "name": "John Doe"}]
+
+
+@persons_router.get("/face_groups", response_model=List[Dict[str, Any]])
+async def list_face_groups():
+    """
+    List all face group files in the `face_groups` directory.
+
+    Returns:
+        List[Dict[str, Any]]: A list of face group files with their metadata.
+    """
+    face_groups = []
+    for subdir in FACE_GROUPS_DIR.iterdir():
+        if subdir.is_dir():
+            for file in subdir.iterdir():
+                if file.is_file():
+                    face_groups.append(
+                        {
+                            "file_name": file.name,
+                            "file_path": str(file),
+                            "parent_dir": subdir.name,
+                        }
+                    )
+    return face_groups
+
+
+@persons_router.get("/face_groups/{parent_dir}/{file_name}")
+async def get_face_group_file(parent_dir: str, file_name: str):
+    """
+    Serve a specific face group file.
+
+    Args:
+        parent_dir (str): The parent directory of the file.
+        file_name (str): The name of the file.
+
+    Returns:
+        FileResponse: The requested file.
+    """
+    file_path = FACE_GROUPS_DIR / parent_dir / file_name
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
 
 # Include the router in the main app
